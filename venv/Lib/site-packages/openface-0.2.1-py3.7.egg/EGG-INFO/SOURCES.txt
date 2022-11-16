@@ -1,0 +1,14 @@
+LICENSE
+README.md
+setup.py
+openface/__init__.py
+openface/align_dlib.py
+openface/data.py
+openface/helper.py
+openface/openface_server.lua
+openface/torch_neural_net.lutorpy.py
+openface/torch_neural_net.py
+openface.egg-info/PKG-INFO
+openface.egg-info/SOURCES.txt
+openface.egg-info/dependency_links.txt
+openface.egg-info/top_level.txt

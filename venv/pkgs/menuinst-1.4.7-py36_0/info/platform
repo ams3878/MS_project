@@ -1,0 +1,7 @@
+platform:  Windows-10-10.0.14393
+system:    Windows
+node:      10x64build-3
+release:   10
+version:   10.0.14393
+machine:   AMD64
+processor: Intel64 Family 6 Model 62 Stepping 4, GenuineIntel
