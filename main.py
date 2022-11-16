@@ -1,4 +1,3 @@
-import openface
 import cv2
 import helpers
 import camera
@@ -7,7 +6,7 @@ import blendshapes
 from FACS import *
 from tkinter import *
 import numpy as np
-from tkinter import filedialog as fd
+
 specs, cam, vid_writer = camera.camera_setup()
 #TODO change mocap dict to a mocap object with requiste functions
 mocap_dict = mocap.mocap_setup(specs)
@@ -27,6 +26,7 @@ AU_LIST_ANCHORS = [0] * NUM_ANCHORS
 AU_LIST_DIS_TO_BOTTOM = [0] * AU_LIST_SIZE
 
 AU_FILE = open("au.txt", "w")
+BS_FILE = open("bs.txt", "w")
 DONE = False
 print("Initializing MoCap...", end="")
 while(not DONE):
@@ -204,16 +204,27 @@ while(GO):
 
 			#todo replace with send bshapes to render
 			wrtstr2 = ""
+			wrtstr_out = f"{FRAME} "
 			for i,v in enumerate(BLENDSHAPES):
 				if len(v[1]) > 0:
 					ts = 0
 					for t in v[1]:
-						if t_list[t] < .005:
+						t_list[t] -= .01
+						t_list[t] /= .08
+						if t_list[t] < 0:
 							ts = 0
 							break
-						ts += t_list[t]
+						elif t_list[t] > 1:
+							ts += 1
+						else:
+							ts += t_list[t]
 
 					wrtstr2 += f"{i}: {v[0]} \t {ts/len(v[1])}\n"
+					wrtstr_out += f"{ts/len(v[1])} "
+				else:
+					wrtstr_out += f"{-1} "
+
+			BS_FILE.write(wrtstr_out + "\n")
 
 			au_marks_to_draw = [x for i,x in enumerate(lmarks) if i in AU_LIST_IN]
 			helpers.draw_landmarks(au_marks_to_draw, image, "test")
@@ -230,7 +241,7 @@ while(GO):
 		txtarea.delete("1.0", "end")
 		txtarea.insert(END, wrtstr)
 		window.update()
-		txtarea2.delete("1.0","end")
+		txtarea2.delete("1.0", "end")
 		txtarea2.insert(END, wrtstr2)
 		window2.update()
 	else:
