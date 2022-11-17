@@ -3,6 +3,7 @@ import helpers
 import camera
 import mocap
 import blendshapes
+import time
 from FACS import *
 from tkinter import *
 import numpy as np
@@ -46,6 +47,7 @@ txtarea = 0
 window = 0
 GO = True
 CALIBRATE = 0
+WAIT = False
 def stop():
 	global GO
 	GO = False
@@ -54,7 +56,9 @@ def cal():
 	CALIBRATE = 0
 	AU_LIST_ANCHORS_OFFSETS = [(0, 0)] * NUM_ANCHORS
 	AU_LIST_OFFSETS = [(0, 0)] * AU_LIST_SIZE
-
+def pause():
+	global WAIT
+	WAIT = False if WAIT else True
 
 def start_window(t):
 	# declare the window
@@ -71,9 +75,11 @@ def start_window(t):
 	b1.pack(pady=10)
 	b2 = Button(w, text="Calibrate", command=cal)
 	b2.pack(pady=10)
+	b3 = Button(w, text="Pause", command=pause)
+	b3.pack(pady=10)
 	return True, ta, w
 
-
+last_frame_time = 0
 IS_WINDOW, txtarea, window = start_window("AUs")
 IS_WINDOW2, txtarea2, window2 = start_window("BLENDSHAPEs")
 BLENDSHAPES = blendshapes.get_bshapes()
@@ -244,6 +250,11 @@ while(GO):
 		txtarea2.delete("1.0", "end")
 		txtarea2.insert(END, wrtstr2)
 		window2.update()
+		print(1/(time.time() - last_frame_time))
+		last_frame_time = time.time()
+		while(WAIT):
+			sleep(5)
+			continue
 	else:
 		print("No image detected. Please! try again")
 AU_FILE.close()
