@@ -10,7 +10,8 @@ import numpy as np
 
 specs, cam, vid_writer = camera.camera_setup()
 #TODO change mocap dict to a mocap object with requiste functions
-mocap_dict = mocap.mocap_setup(specs)
+open_face_instance = mocap.MoCap_openface(specs)
+#mocap_dict = mocap.mocap_setup(specs)
 
 
 AU_LIST_SIZE = 29*2
@@ -32,14 +33,14 @@ DONE = False
 print("Initializing MoCap...", end="")
 while(not DONE):
 	result, image = cam.read()
-	mocap.find_face(image, mocap_dict)
-	if result:
-		if mocap_dict["bbox"] is not None:
-			lmarks, bbox = mocap.get_lmarks(image, mocap_dict)
-			FACS_map = create_FACS_dictionary("FACS_aus", {})
-			# get facs: if calibration fails will return tuple, (0, error)
-			create_FACS_Landmarks(bbox, lmarks, FACS_map)
-			DONE = True
+	open_face_instance.set_image(image)
+	open_face_instance.set_face()
+	if result and open_face_instance.bbox:
+		#lmarks, bbox = mocap.get_lmarks(image, mocap_dict)
+		FACS_map = create_FACS_dictionary("FACS_aus", {})
+		# get facs: if calibration fails will return tuple, (0, error)
+		create_FACS_Landmarks(open_face_instance.bbox,  open_face_instance.get_lmarks(), FACS_map)
+		DONE = True
 print("FINISHED.")
 FRAME = -1
 IS_WINDOW = False
@@ -89,31 +90,37 @@ while(GO):
 	#key = cv2.waitKey(1) & 0xFF
 
 	result, image = cam.read()
-	mocap.find_face(image, mocap_dict)
-
+	open_face_instance.set_image(image)
+	open_face_instance.set_face()
 	if result:
-		if mocap_dict["bbox"] is not None:  #todo move to get_lmarks
-			lmarks, bbox = mocap.get_lmarks(image, mocap_dict)
-			if True:
-				CALIBRATE += 1
-				side = ["left", "right"]
-				if CALIBRATE == 1:
-					map_LANDMARKS_to_FACS(lmarks, FACS_map)
-					map_BLENDSHAPES_to_FACS([(1,[0,1],[0,2])], FACS_map)
-				#set box size for funs
+		if open_face_instance.bbox:
+			lmarks = open_face_instance.get_lmarks()
+			bbox = open_face_instance.bbox
+			######################################################################################################
+			## calculate rest positions, do calibration if on first run, or if reset
+			######################################################################################################
+			CALIBRATE += 1
+			side = ["left", "right"]
+			if CALIBRATE == 1:
+				map_LANDMARKS_to_FACS(lmarks, FACS_map)
+				map_BLENDSHAPES_to_FACS([(1,[0,1],[0,2])], FACS_map)
+			#set box size for funs
 
-				AU_LIST_IN = [FACS_map[i // 2 + 1]["IN_lmarks"][side[i % 2]] for i in range(1, 56)]
-				AU_LIST_OFFSETS = [(((lmarks[x][0] - bbox.left()) / bbox.width() + (y[0] * (CALIBRATE - 1))) / CALIBRATE,
-												 ((bbox.bottom() - lmarks[x][1]) / bbox.height() + (y[1] * (CALIBRATE - 1))) / CALIBRATE) for x, y in zip(AU_LIST_IN, AU_LIST_OFFSETS)]
+			AU_LIST_IN = [FACS_map[i // 2 + 1]["IN_lmarks"][side[i % 2]] for i in range(1, 56)]
+			AU_LIST_OFFSETS = [(((lmarks[x][0] - bbox.left()) / bbox.width() + (y[0] * (CALIBRATE - 1))) / CALIBRATE,
+											 ((bbox.bottom() - lmarks[x][1]) / bbox.height() + (y[1] * (CALIBRATE - 1))) / CALIBRATE) for x, y in zip(AU_LIST_IN, AU_LIST_OFFSETS)]
 
-				#bottom mid top mouth
-				AU_LIST_ANCHORS = [FACS_map['anchors'][i]["in"] for i in FACS_map['anchors']]
-				AU_LIST_ANCHORS_OFFSETS = [(((lmarks[x][0] - bbox.left()) / bbox.width() + (y[0] * (CALIBRATE - 1))) / CALIBRATE,
-														((bbox.bottom() - lmarks[x][1]) / bbox.height() + (y[1] * (CALIBRATE - 1))) / CALIBRATE) for
-													 x, y in zip(AU_LIST_ANCHORS, AU_LIST_ANCHORS_OFFSETS)]
+			#bottom mid top mouth
+			AU_LIST_ANCHORS = [FACS_map['anchors'][i]["in"] for i in FACS_map['anchors']]
+			AU_LIST_ANCHORS_OFFSETS = [(((lmarks[x][0] - bbox.left()) / bbox.width() + (y[0] * (CALIBRATE - 1))) / CALIBRATE,
+													((bbox.bottom() - lmarks[x][1]) / bbox.height() + (y[1] * (CALIBRATE - 1))) / CALIBRATE) for
+												 x, y in zip(AU_LIST_ANCHORS, AU_LIST_ANCHORS_OFFSETS)]
 
-				#Initial distance from node to bottom anchor
-				AU_LIST_DIS_TO_MID = [((x[0] - AU_LIST_ANCHORS_OFFSETS[1][0])**2 + (x[1] - AU_LIST_ANCHORS_OFFSETS[1][1])**2)**.5 for x in AU_LIST_OFFSETS]
+			#Initial distance from node to bottom anchor
+			AU_LIST_DIS_TO_MID = [((x[0] - AU_LIST_ANCHORS_OFFSETS[1][0])**2 + (x[1] - AU_LIST_ANCHORS_OFFSETS[1][1])**2)**.5 for x in AU_LIST_OFFSETS]
+			######################################################################################################
+			## End of calibration section
+			######################################################################################################
 
 			t_curs = [((lmarks[x][0] - bbox.left()) / bbox.width(),
 														(bbox.bottom() - lmarks[x][1]) / bbox.height()) for x in AU_LIST_IN]
@@ -234,7 +241,14 @@ while(GO):
 
 			au_marks_to_draw = [x for i,x in enumerate(lmarks) if i in AU_LIST_IN]
 			helpers.draw_landmarks(au_marks_to_draw, image, "test")
-			# helpers.draw_landmarks(facs_lmarks, image, (0,0,200))
+			au_test_marks = []
+			for i in FACS_map:
+				if i == 'anchors':
+					pass
+					#print([FACS_map['anchors'][x]['au'] for x in FACS_map['anchors']])
+				else:
+					au_test_marks += (FACS_map[i]['AU_lmarks']['left'] + FACS_map[i]['AU_lmarks']['right'])
+			#helpers.draw_landmarks(au_test_marks, image, (0,0,200))
 
 
 		# crop image
