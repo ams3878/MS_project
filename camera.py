@@ -15,5 +15,8 @@ def camera_setup():
 	p = 0
 	c = get_camera(p)
 	s = get_cv2_specs(c, p)
-	vw = cv2.VideoWriter('filename1.avi', cv2.VideoWriter_fourcc(*'MJPG'), 10, s["size"])
-	return s, c, vw
+	return s, c
+
+def display_cam(title, image):
+	cv2.imshow(title, image)
+	cv2.imwrite(title+".png", image)
