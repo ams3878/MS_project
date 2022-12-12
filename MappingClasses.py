@@ -1,7 +1,6 @@
 import sys
 import dlib
 import numpy as np
-from time import sleep
 
 class FacialMapping:
 	def __init__(self):
@@ -42,6 +41,15 @@ class FACS(FacialMapping):
 		self.rotation_list = [0, 0, 0] # x,y,z the units are arbitrary
 		self.create_FACS_dictionary(au_file)
 
+	def reset_runtime_structures(self):
+		self.input_indices = [0] * self.au_list_size
+		self.AU_rest_positions = [(0, 0)] * self.au_list_size
+		self.AU_deltas = [(0, 0)] * self.au_list_size
+
+		self.anchor_input_indices = [0] * self.num_anchors
+		self.anchor_AU_rest_positions = [(0, 0)] * self.num_anchors
+		self.anchor_AU_deltas = [(0, 0)] * self.num_anchors
+
 	def get_input_frame(self):
 		self.capture_object.set_image()
 		self.capture_object.set_face()
@@ -57,8 +65,8 @@ class FACS(FacialMapping):
 			FACS_map[i] = {"val_int": [0, 0], "val_float_in": [0.0, 0.0], "val_float_out": [0.0, 0.0],
 										 "name": "", "au": i,
 										 "AU_lmarks": {"left": [], "right": []},
-										 "IN_lmarks": {"left": [], "right": []},
-										 "Blendshape":{"left": [], "right": []}}
+										 "IN_lmarks": {"left": [], "right": []}, # named landmarks based on current implementation
+										 "Blendshape":{"name": "","left": []}} # named blendshape based on current implementation
 
 		f = open(facs_file, "r")
 		i = 0
@@ -224,11 +232,14 @@ class FACS(FacialMapping):
 				fmap[v]["IN_lmarks"]["left"] = get_closest(lmarks, fmap[v]["AU_lmarks"]["left"])
 				fmap[v]["IN_lmarks"]["right"] = get_closest(lmarks, fmap[v]["AU_lmarks"]["right"])
 
+		self.reset_runtime_structures()
+
 	def init_map_output(self):
 		# bshapes is list of (au, [bshape_L],[bshape_R])
-		for v in self.control_object:
+		for v in self.control_object.controls_data:
 			if v[1][0] == -1:
 				continue
+			print(v)
 			self.mapping[v[1][0] // 2]["Blendshape"]["left"] = v[1]
 			self.mapping[v[1][0] // 2]["Blendshape"]["right"] = v[2]
 
@@ -252,18 +263,20 @@ class FACS(FacialMapping):
 	def calculate_deltas(self):
 		self.AU_deltas = do_delta_calc(self.capture_object.capture_data, self.capture_object.bbox,
 																	self.input_indices, self.AU_rest_positions)
-
 		self.anchor_AU_deltas = do_delta_calc(self.capture_object.capture_data, self.capture_object.bbox,
 																				self.anchor_input_indices, self.anchor_AU_rest_positions)
 
 	def calculate_rotations(self):
-		# Y-rot up/down
-		self.rotation_list[1] = self.anchor_AU_deltas[1][0]
-		# X-rot left/right
+		# X-rot Look up/down
+
 		tilt_A = self.anchor_AU_deltas[1][1] - self.anchor_AU_deltas[0][1]
 		tilt_B = self.anchor_AU_deltas[2][1] - self.anchor_AU_deltas[1][1]
+		self.rotation_list[0] = tilt_A if tilt_A > tilt_B else -tilt_B
 
-		self.rotation_list[1] = tilt_A if tilt_A > tilt_B else -tilt_B
+		# Y-rot Look left/right
+		self.rotation_list[1] = self.anchor_AU_deltas[1][0]
+
+
 		'''
 		TILT_SHIFT = 0
 		if tilt_A > .02:
@@ -274,43 +287,45 @@ class FACS(FacialMapping):
 		else:
 			window_one[2] += "no tilt"
 		'''
-		# Z-rot tilt left/right
+		# Z-rot Tilt left/right
+
 		self.rotation_list[2] = \
-			np.arcsin((self.anchor_AU_deltas[0][0] - self.rotation_list[1]) /
-								(self.anchor_AU_rest_positions[0][1] - self.anchor_AU_rest_positions[1][1] + .0000000001)
-								)
+			np.arcsin(abs(self.anchor_AU_deltas[0][0] - self.rotation_list[1]) /
+								(self.anchor_AU_rest_positions[1][1] - self.anchor_AU_rest_positions[0][1]))
 
 	def extract_controls(self):
-		# remove turn and tilt from each landmark
-		# t_list = [(x[0] - TURN_SHIFT, x[1] - TILT_SHIFT) for x in AU_LIST_DELTAS]
-		# remove the average that all the lmarks moved this should take out the the turn and tilt values
-		t_avg = [(sum(tup) / len(self.AU_deltas)) for tup in zip(*self.AU_deltas)]
-		t_list = [(x[0] - t_avg[0], x[1] - t_avg[1]) for x in self.AU_deltas]
-		# print(AU_LIST_DIS_TO_BOTTOM)
-		# this should remove the tilt value out of each anchor, but something is not right.
-		# t_list = [(x[0] - (np.sin(anchor_z_rot_theta)*y), x[1] - (np.cos(anchor_z_rot_theta)*y)) for x,y in zip(t_list, AU_LIST_DIS_TO_MID)]
-		# print(t_list)
-		t_list = [(x[0] ** 2 + x[1] ** 2) ** .5 for x in t_list]
-		self.AU_deltas = t_list
+
 		for i, v in enumerate(self.control_object.controls_data):
 				if v[1][0] != -1:
 					ts = 0
 					for t in v[1]:
-						t_list[t[0]] -= .01
-						t_list[t[0]] /= .08
-						if t_list[t[0]] < 0: # if any expression too low the blendshape is set to 0
+						#todo prolly can use squared distance and drop the root. but require some changes to the rest of the logic
+						delta_val = ((self.AU_deltas[t[0]][0]**2 + self.AU_deltas[t[0]][1]**2)**.5 - .01) / .08
+						if delta_val < 0: # if any expression too low the blendshape is set to 0
 							ts = 0
 							break
-						elif t_list[t[0]] > 1:
+						elif delta_val > 1:
 							ts += t[1]  # clamp the value so blendshapes stay in "normal" range.
 						else:
-							ts += t_list[t[0]] * t[1]
+							ts += delta_val * t[1]
+					#todo change this to just send values, let control class sort where in structure it goes
 					self.control_object.controls_data[i][2] = ts/len(v[1])
 
+
+########################################################################################################################
+# Functions below are for called are used to do some MATH in the mapping class
+########################################################################################################################
 def do_delta_calc(lmarks, bbox,  index_list, rest_list):
 	t = [((lmarks[x][0] - bbox.left()) / bbox.width(),
 				(bbox.bottom() - lmarks[x][1]) / bbox.height()) for x in index_list]
-	return [(x[0] - y[0], x[1] - y[1]) for x, y in zip(t, rest_list)]
+	t = [(x[0] - y[0], x[1] - y[1]) for x, y in zip(t, rest_list)]
+	# remove turn and tilt from each landmark
+	# t_list = [(x[0] - TURN_SHIFT, x[1] - TILT_SHIFT) for x in AU_LIST_DELTAS]
+	# remove the average that all the lmarks moved this should take out the the turn and tilt values
+	t_avg = [(sum(tup) / len(t)) for tup in zip(*t)]
+	# this should remove the tilt value out of each anchor, but something is not right.
+	# t_list = [(x[0] - (np.sin(anchor_z_rot_theta)*y), x[1] - (np.cos(anchor_z_rot_theta)*y)) for x,y in zip(t_list, AU_LIST_DIS_TO_MID)]
+	return [(x[0] - t_avg[0], x[1] - t_avg[1]) for x in t]
 
 # mode: height == 1 width == 0 negate_height == 3 negate_width = 2
 def get_pixel(mode, bbox, max_coef, cm):

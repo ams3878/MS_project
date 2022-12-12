@@ -40,7 +40,7 @@ class MoCapBaseClass:
 class MoCap_openface(MoCapBaseClass):
 	def __init__(self, settings_dict=None):
 		super().__init__()
-		self.dlibs_path = "C:\\Users\\Aaron\\PycharmProjects\\MS_project\\shape_predictor_81_face_landmarks.dat"
+		self.dlibs_path = ".\\shape_predictor_81_face_landmarks.dat"
 		self.align_object = openface.AlignDlib(self.dlibs_path)
 		self.setup_capture_device()
 

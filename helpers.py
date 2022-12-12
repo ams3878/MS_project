@@ -30,17 +30,13 @@ def stop():
 	global GO
 	GO = False
 
-def cal():
-	global  FACS_object
-	FACS_o = FACS_object  # workaround, find good way to pass obj
-	FACS_o.anchor_AU_rest_positions = [(0, 0)] * FACS_o.num_anchors
-	FACS_o.AU_rest_positions = [(0, 0)] * FACS_o.num_AUs
+def reset(fo):
+	fo.init_map_input()
 
-def pause():
-	global WAIT
-	WAIT = False if WAIT else True
+def pause(dc):
+	dc[0] = False if dc[0] else True
 
-def start_window(t):
+def start_window(t, fo, dc):
 	# declare the window
 	w = Tk()
 	# set window title
@@ -53,14 +49,15 @@ def start_window(t):
 	ta.pack(pady=20)
 	b1 = Button(w, text="Delete", command=stop)
 	b1.pack(pady=10)
-	b2 = Button(w, text="Calibrate", command=cal)
+	b2 = Button(w, text="Reset", command=lambda: reset(fo))
 	b2.pack(pady=10)
-	b3 = Button(w, text="Pause", command=pause)
+	b3 = Button(w, text="Pause", command=lambda: pause(dc))
 	b3.pack(pady=10)
 	return [ta, w, ""]
 
-def update_window(w):
-	w[0].delete("1.0", END)
-	w[0].insert(END, w[2])
-	w[2] = ""
+def update_window(w, dc):
+	if dc[0]:
+		w[0].delete("1.0", END)
+		w[0].insert(END, w[2])
+		w[2] = ""
 	w[1].update()
